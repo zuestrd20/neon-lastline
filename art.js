@@ -12,11 +12,21 @@ const rect = (c,x,y,w,h,color) => { c.fillStyle=color; c.fillRect(Math.round(x),
 function poly(c,pts,color) { c.fillStyle=color;c.beginPath();c.moveTo(pts[0][0],pts[0][1]); for(let i=1;i<pts.length;i++)c.lineTo(pts[i][0],pts[i][1]); c.closePath();c.fill(); }
 function line(c,x1,y1,x2,y2,color,width=1) { c.strokeStyle=color;c.lineWidth=width;c.beginPath();c.moveTo(Math.round(x1)+.5,Math.round(y1)+.5);c.lineTo(Math.round(x2)+.5,Math.round(y2)+.5);c.stroke(); }
 function text(c,str,x,y,size,color,align='left') { c.fillStyle=color;c.font=`${size<10?'':'bold '}${size}px "Courier New", monospace`;c.textAlign=align;c.textBaseline='top';c.fillText(str,x,y); }
-function glow(c,x,y,r,color,alpha=.12) { c.save();c.globalAlpha=alpha;const g=c.createRadialGradient(x,y,0,x,y,r);g.addColorStop(0,color);g.addColorStop(1,'transparent');c.fillStyle=g;c.fillRect(x-r,y-r,r*2,r*2);c.restore(); }
+function glow(c,x,y,r,color,alpha=.12) {
+  const key=GLOW_COLORS.has(color)?color:'#6ff3df';let cached=glowCache.get(key);
+  if(!cached){const surface=makeCanvas(128,128);if(surface){const g=surface.ctx.createRadialGradient(64,64,0,64,64,64);g.addColorStop(0,key);g.addColorStop(1,'transparent');surface.ctx.fillStyle=g;surface.ctx.fillRect(0,0,128,128);cached=surface.canvas;glowCache.set(key,cached);}}
+  c.save();c.globalAlpha=alpha;
+  if(cached)c.drawImage(cached,x-r,y-r,r*2,r*2);
+  else{const g=c.createRadialGradient(x,y,0,x,y,r);g.addColorStop(0,key);g.addColorStop(1,'transparent');c.fillStyle=g;c.fillRect(x-r,y-r,r*2,r*2);}
+  c.restore();
+}
 function pixelEllipse(c,x,y,w,h,color) { const s=Math.max(2,Math.floor(h/4));rect(c,x+s,y,w-s*2,h,color);rect(c,x,y+s,w,h-s*2,color); }
 function hpBar(c,x,y,hp,max,color,width=32) { if(!(max>0))return; const amount=clamp(hp/max,0,1);rect(c,x-width/2-1,y-1,width+2,5,'#071019');rect(c,x-width/2,y,width,3,'#364049');rect(c,x-width/2,y,Math.max(0,width*amount),3,color); }
-const bgCache = new Map(), busCache = new Map();
-const vignetteCache = new WeakMap(), entityTeams = new WeakMap(), entityBuffer = [];
+const bgCache = new Map(), busCache = new Map(), glowCache = new Map(), spriteCache = new Map(), portraitCache = new Map();
+const GLOW_COLORS=new Set(['#6ff3df','#65e2ce','#e58b98','#72e4ca','#ff7178','#70efbe','#ee9d4d']);
+const HUMAN_TYPES=new Set(['brawler','ranger','shield','medic','bomber']), ENEMY_TYPES=new Set(['walker','runner','brute','spitter','boss']);
+const SPRITE_W=160,SPRITE_H=128,SPRITE_X=80,SPRITE_Y=112;
+const entityTeams = new WeakMap(), entityBuffer = [];
 const rainSeeds = Array.from({length:43},(_,i)=>[noise(i+753)*1130,noise(i+923)*480]);
 const drawOrder = (a,b)=>(a.y??355)-(b.y??355)||(a.x??0)-(b.x??0);
 function makeCanvas(w,h){
@@ -25,7 +35,7 @@ function makeCanvas(w,h){
     if(typeof OffscreenCanvas!=='undefined')canvas=new OffscreenCanvas(w,h);
     else if(typeof document!=='undefined'&&typeof document.createElement==='function'){canvas=document.createElement('canvas');canvas.width=w;canvas.height=h;}
     if(!canvas||typeof canvas.getContext!=='function')return null;
-    const ctx=canvas.getContext('2d');return ctx?{canvas,ctx}:null;
+    const ctx=canvas.getContext('2d',{willReadFrequently:true});if(ctx)ctx.imageSmoothingEnabled=false;return ctx?{canvas,ctx}:null;
   }catch{return null;}
 }
 function stageIndex(stage) { if(typeof stage==='number')return stage; if(stage&&typeof stage==='object')return Number(stage.index??stage.id??stage.number??0)||0;return 0; }
@@ -84,6 +94,7 @@ function paintSky(c,stage=0) {
   glow(c,795,115,70,'#65e2ce',.13);glow(c,707,264,41,'#e58b98',.13);glow(c,98,247,41,'#72e4ca',.10);
   // Abandoned little delivery scooter, far behind the play plane.
   pixelEllipse(c,751,327,12,12,'#081e28');pixelEllipse(c,785,327,12,12,'#081e28');rect(c,754,330,6,6,'#516972');rect(c,788,330,6,6,'#516972');poly(c,[[757,330],[766,316],[783,321],[790,331]],'#39524f');rect(c,773,313,15,4,'#13252c');line(c,784,324,790,307,'#54665d',2);line(c,788,307,797,308,'#54665d',2);rect(c,761,313,11,9,'#806b52');
+  const v=c.createLinearGradient(0,0,0,430);v.addColorStop(0,'#0618272b');v.addColorStop(.3,'#06182700');v.addColorStop(.85,'#06182700');v.addColorStop(1,'#06182755');c.fillStyle=v;c.fillRect(0,0,1000,430);
 }
 function drawStageLandmarks(c,index){
   if(index===1){
@@ -185,7 +196,44 @@ function drawBarricade(c,time,hp,max){
 }
 function shadow(c,x,y,w=31){pixelEllipse(c,x-w/2,y-2,w,7,'#03172088');}
 function boot(c,x,y,w=6){rect(c,x,y,w,3,'#061721');rect(c,x+1,y,Math.max(2,w-2),1,'#59666a');}
-function drawHuman(c,u,time,portrait=false){
+function spriteAtlas(type,enemy){
+  type=(enemy?ENEMY_TYPES:HUMAN_TYPES).has(type)?type:(enemy?'walker':'brawler');
+  if(spriteCache.has(type))return spriteCache.get(type);
+  const surface=makeCanvas(SPRITE_W*10,SPRITE_H*2);if(!surface)return null;
+  const c=surface.ctx,paint=enemy?paintZombie:paintHuman;
+  for(let flash=0;flash<2;flash++)for(let frame=0;frame<10;frame++){
+    const anim=frame<4?'walk':frame<8?'attack':'idle';
+    const speed=enemy?(type==='runner'?13:(type==='brute'||type==='boss')?5:7):(type==='brawler'?9:7);
+    const t=frame<4?frame*Math.PI/2/speed:frame<8?(frame-4)*Math.PI/4/12:(frame-8)*Math.PI/4;
+    c.save();c.translate(frame*SPRITE_W,flash*SPRITE_H);
+    paint(c,{type,id:0,x:SPRITE_X,y:SPRITE_Y,hp:100,maxHp:100,state:anim,attackTimer:0,flash:flash?.13:0},t);
+    c.restore();
+  }
+  spriteCache.set(type,surface.canvas);return surface.canvas;
+}
+function cachedCharacter(c,u,time,enemy,portrait){
+  const fallback=enemy?paintZombie:paintHuman,atlas=spriteAtlas(u.type,enemy);
+  if(!atlas){fallback(c,u,time,portrait);return;}
+  const type=(enemy?ENEMY_TYPES:HUMAN_TYPES).has(u.type)?u.type:(enemy?'walker':'brawler'),
+    id=typeof u.id==='number'?u.id:String(u.id||'').length,state=u.state||u.anim||'walk',
+    dead=state==='death'||state==='dead',attacking=state==='attack'||state==='attacking'||(Number(u.attackTimer)>0&&Number(u.attackTimer)<.22),
+    moving=enemy?!['idle','attack','attacking','death','dead'].includes(state):state==='walk'||state==='walking'||state==='move',
+    speed=enemy?(type==='runner'?13:(type==='brute'||type==='boss')?5:7):(type==='brawler'?9:7),
+    phase=time*speed+id*(enemy?1:1.73),
+    frame=dead?8:attacking?4+((Math.floor((time*12+id)/(Math.PI/4))%4+4)%4):moving?((Math.floor(phase/(Math.PI/2))%4+4)%4):8+((Math.floor((time*2+id)/Math.PI)%2+2)%2),
+    naturalScale=enemy?(type==='boss'?2.55:type==='brute'?2.3:2):2,
+    scale=portrait?1/naturalScale:1,x=u.x??(enemy?760:300),y=u.y??355;
+  c.save();c.translate(Math.round(x),Math.round(y));
+  if(!enemy&&u.facing===-1)c.scale(-1,1);
+  if(dead){c.translate(0,-4);c.rotate((enemy?1:-1)*Math.PI*.45*clamp(u.deathProgress??1,0,1));c.globalAlpha*=.7;}
+  c.drawImage(atlas,frame*SPRITE_W,u.flash>0?SPRITE_H:0,SPRITE_W,SPRITE_H,-SPRITE_X*scale,-SPRITE_Y*scale,SPRITE_W*scale,SPRITE_H*scale);
+  c.restore();
+  if(!portrait&&u.hp<u.maxHp)hpBar(c,x,y-(enemy?(type==='boss'?103:type==='brute'?91:77):79),u.hp,u.maxHp,enemy?(type==='boss'?'#f1ae70':'#df8e88'):'#65e3c3',enemy&&type==='boss'?48:enemy?30:31);
+  if(!portrait&&!enemy&&u.selected){rect(c,x-15,y+7,30,2,'#c2f6d3');rect(c,x-19,y+4,4,2,'#c2f6d3');rect(c,x+15,y+4,4,2,'#c2f6d3');}
+}
+function drawHuman(c,u,time,portrait=false){cachedCharacter(c,u,time,false,portrait);}
+function drawZombie(c,u,time,portrait=false){cachedCharacter(c,u,time,true,portrait);}
+function paintHuman(c,u,time,portrait=false){
   const type=u.type||'brawler',id=typeof u.id==='number'?u.id:String(u.id||'').length,
     state=u.state||u.anim||'walk',moving=state==='walk'||state==='walking'||state==='move',
     attacking=state==='attack'||state==='attacking'||(Number(u.attackTimer)>0&&Number(u.attackTimer)<.22),
@@ -249,7 +297,7 @@ function drawHuman(c,u,time,portrait=false){
   if(!portrait&&u.selected){rect(c,x-15,y+7,30,2,'#c2f6d3');rect(c,x-19,y+4,4,2,'#c2f6d3');rect(c,x+15,y+4,4,2,'#c2f6d3');}
 }
 function muzzle(c,x,y,time,large=false){const k=Math.floor(time*25)%2;poly(c,[[x,y-1],[x+4,y-5-k],[x+4,y-2],[x+9+(large?4:0),y],[x+4,y+2],[x+3,y+5],[x,y+2]],'#f4b55f');rect(c,x,y-1,4,3,'#fff2b1');}
-function drawZombie(c,u,time,portrait=false){
+function paintZombie(c,u,time,portrait=false){
   const type=u.type||'walker',big=type==='brute'||type==='boss',boss=type==='boss',runner=type==='runner',spitter=type==='spitter';
   const scale=portrait?1:(boss?2.55:big?2.3:2),x=u.x??760,y=u.y??355,
     id=typeof u.id==='number'?u.id:String(u.id||'').length,phase=time*(runner?13:big?5:7)+id,
@@ -322,7 +370,7 @@ function drawEffect(c,e,time){
 export function drawScene(ctx, state={}){
   const rawTime=state.time??performance.now()/1000,time=rawTime>1e8?rawTime/1000:rawTime,reduced=state.reducedMotion;
   const t=reduced?0:time,stage=state.stage??0;
-  ctx.clearRect(0,0,SCENE_WIDTH,SCENE_HEIGHT);ctx.save();ctx.imageSmoothingEnabled=false;
+  ctx.clearRect(0,0,SCENE_WIDTH,SCENE_HEIGHT);ctx.save();ctx.imageSmoothingEnabled=false;ctx.clearRect(0,0,1000,430);
   const bg=getBackground(stage);if(bg)ctx.drawImage(bg,0,0);else paintSky(ctx,stage);
   // Slowly drifting layered mist keeps the road readable.
   for(let i=0;i<3;i++){const fx=((t*5+i*390)%1380)-230;rect(ctx,fx,286+i*11,220,5,'#aaccc60a');rect(ctx,fx+27,293+i*11,167,3,'#aaccc60c');}
@@ -339,11 +387,10 @@ export function drawScene(ctx, state={}){
     for(let i=0;i<9;i++){const pulse=(t*.7+i*.13)%1;rect(ctx,noise(i+165)*1000,360+noise(i+410)*52,3+pulse*7,1,`rgba(113,165,165,${(1-pulse)*.18})`);}}
   // Foreground weeds at the canvas corners anchor the pixel scene.
   for(let i=0;i<10;i++){const x=i<5?i*6:956+(i-5)*8;line(ctx,x,430,x+3,416-noise(i+9)*10,'#092329',2);line(ctx,x,425,x-5,416,'#10323a',2);}
-  let v=vignetteCache.get(ctx);if(!v){v=ctx.createLinearGradient(0,0,0,430);v.addColorStop(0,'#0618272b');v.addColorStop(.3,'#06182700');v.addColorStop(.85,'#06182700');v.addColorStop(1,'#06182755');vignetteCache.set(ctx,v);}ctx.fillStyle=v;ctx.fillRect(0,0,1000,430);
   ctx.restore();
 }
 /** A square canvas portrait. Does not mutate state or require external assets. */
-export function drawPortrait(ctx,type,time=0,size=80){
+function paintPortrait(ctx,type,time=0,size=80){
   ctx.save();ctx.imageSmoothingEnabled=false;ctx.clearRect(0,0,size,size);
   const enemy=['walker','runner','brute','spitter','boss'].includes(type);
   const palettes={brawler:['#624930','#dfab5f'],ranger:['#244f51','#68b6a7'],shield:['#2d405a','#89b4c3'],medic:['#4b5c50','#d4dab1'],bomber:['#585235','#c7be72']};
@@ -354,4 +401,13 @@ export function drawPortrait(ctx,type,time=0,size=80){
   const entity={x:0,y:0,type,id:3,state:'idle',hp:100,maxHp:100};if(enemy)drawZombie(ctx,entity,time,true);else drawHuman(ctx,entity,time,true);ctx.restore();
   rect(ctx,0,0,size,2,light);rect(ctx,0,size-2,size,2,light+'88');rect(ctx,0,0,2,size,light+'66');rect(ctx,size-2,0,2,size,light+'66');
   rect(ctx,4,4,7,2,light);rect(ctx,4,4,2,7,light);rect(ctx,size-11,size-6,7,2,light);rect(ctx,size-6,size-11,2,7,light);ctx.restore();
+}
+
+/** Portrait cache is bounded to ten 160 × 80 software surfaces. */
+export function drawPortrait(ctx,type,time=0,size=80){
+  const key=HUMAN_TYPES.has(type)||ENEMY_TYPES.has(type)?type:'brawler';let cached=portraitCache.get(key);
+  if(!cached){const surface=makeCanvas(160,80);if(surface){for(let frame=0;frame<2;frame++){surface.ctx.save();surface.ctx.translate(frame*80,0);paintPortrait(surface.ctx,key,(frame*Math.PI+0.2-3)/2,80);surface.ctx.restore();}cached=surface.canvas;portraitCache.set(key,cached);}}
+  if(!cached){paintPortrait(ctx,type,time,size);return;}
+  const frame=((Math.floor((time*2+3)/Math.PI)%2)+2)%2;
+  ctx.save();ctx.imageSmoothingEnabled=false;ctx.clearRect(0,0,size,size);ctx.drawImage(cached,frame*80,0,80,80,0,0,size,size);ctx.restore();
 }

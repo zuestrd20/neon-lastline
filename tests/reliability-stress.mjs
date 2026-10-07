@@ -39,7 +39,7 @@ for (let run = 0; run < runCount; run++) {
     assert.ok(state.allies.length <= 32);
     assert.ok(state.effects.length <= 160);
     assert.ok(state.events.length <= 24);
-    if (frame % 120 === 0) {
+    { // Check live bounds on every animation frame, not only at checkpoints.
       const audit = ui.audit();
       maxima.nodes = Math.max(maxima.nodes, audit.nodes); maxima.contexts = Math.max(maxima.contexts, audit.contexts);
       assert.ok(audit.nodes <= 220, `live DOM grew to ${audit.nodes}`);

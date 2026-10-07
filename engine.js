@@ -341,9 +341,9 @@ export class Game {
       s.stats.kills++; s.reward += u.reward;
       s.resource = Math.min(s.maxResource, s.resource + this.mod.killEnergy);
       if (u.type === 'boss') { s.bossDefeated = true; this._event('bossDown', '終站吞噬者倒下。清空路障，迎接黎明！'); }
-      this._effect('death', u.x, u.y, { color: u.color, ttl: 0.5 });
+      this._effect('death', u.x, u.y, { color: u.color, ttl: 0.5, team: u.team, entityType: u.type });
     }
-    for (const u of s.allies.filter(u => u.hp <= 0)) this._effect('death', u.x, u.y, { color: u.color, ttl: 0.45 });
+    for (const u of s.allies.filter(u => u.hp <= 0)) this._effect('death', u.x, u.y, { color: u.color, ttl: 0.45, team: u.team, entityType: u.type });
     s.enemies = s.enemies.filter(u => u.hp > 0); s.allies = s.allies.filter(u => u.hp > 0);
   }
   _clearWave() {
