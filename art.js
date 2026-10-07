@@ -30,7 +30,7 @@ function makeCanvas(w,h){
 }
 function stageIndex(stage) { if(typeof stage==='number')return stage; if(stage&&typeof stage==='object')return Number(stage.index??stage.id??stage.number??0)||0;return 0; }
 function paintSky(c,stage=0) {
-  const index=clamp(stageIndex(stage),0,2), g=c.createLinearGradient(0,0,0,345);
+  const index=clamp(Math.floor(stageIndex(stage)||0),0,2), g=c.createLinearGradient(0,0,0,345);
   const sky=[['#122c3f','#344b57','#a06b65'],['#112b32','#48413f','#af8052'],['#20243c','#575066','#a98588']][Math.min(2,index)]||['#122c3f','#344b57','#a06b65'];g.addColorStop(0,sky[0]);g.addColorStop(.48,sky[1]);g.addColorStop(1,sky[2]);c.fillStyle=g;c.fillRect(0,0,1000,350);
   // Layered, stepped clouds deliberately retain the low-resolution silhouette.
   for(let k=0;k<20;k++){const x=noise(k+90)*1100-60,y=14+noise(k+43)*170,w=45+noise(k+2)*200;rect(c,x,y,w,3+noise(k+3)*8,k%2?'#273b4c55':'#78909816');}
@@ -123,7 +123,7 @@ function drawBuilding(c,x,y,w,h,seed){
 }
 function drawFence(c,x,y,w){rect(c,x,y,w,2,'#52666a');rect(c,x,y,3,32,'#4b6266');rect(c,x+w-3,y,3,32,'#4b6266');for(let k=5;k<w;k+=9){line(c,x+k,y+3,x+Math.min(k+20,w-3),y+29,'#41575e');line(c,x+k,y+28,x+Math.min(k+20,w-3),y+3,'#41575e');}}
 function getBackground(stage){
-  const key=clamp(stageIndex(stage),0,2);if(bgCache.has(key))return bgCache.get(key);
+  const key=clamp(Math.floor(stageIndex(stage)||0),0,2);if(bgCache.has(key))return bgCache.get(key);
   const surface=makeCanvas(1000,430);if(!surface)return null;
   paintSky(surface.ctx,key);bgCache.set(key,surface.canvas);return surface.canvas;
 }
@@ -322,7 +322,7 @@ function drawEffect(c,e,time){
 export function drawScene(ctx, state={}){
   const rawTime=state.time??performance.now()/1000,time=rawTime>1e8?rawTime/1000:rawTime,reduced=state.reducedMotion;
   const t=reduced?0:time,stage=state.stage??0;
-  ctx.save();ctx.imageSmoothingEnabled=false;
+  ctx.clearRect(0,0,SCENE_WIDTH,SCENE_HEIGHT);ctx.save();ctx.imageSmoothingEnabled=false;
   const bg=getBackground(stage);if(bg)ctx.drawImage(bg,0,0);else paintSky(ctx,stage);
   // Slowly drifting layered mist keeps the road readable.
   for(let i=0;i<3;i++){const fx=((t*5+i*390)%1380)-230;rect(ctx,fx,286+i*11,220,5,'#aaccc60a');rect(ctx,fx+27,293+i*11,167,3,'#aaccc60c');}

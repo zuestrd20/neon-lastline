@@ -4,7 +4,7 @@ const $=id=>document.getElementById(id), KEY='neon-lastline-v1';
 let meta,saveBlocked=false;try{meta=sanitizeSave(localStorage.getItem(KEY));}catch{meta=sanitizeSave({});saveBlocked=true;}
 let game=null,preview=new Game({seed:7}),last=performance.now(),uiTime=0,shown='',sound=false,audio=null,modalPaused=false,lastEvent=0,toastUntil=0,lastRender=0,lastUI=0,lastPortrait=0;
 const reduced=matchMedia('(prefers-reduced-motion: reduce)').matches||meta.settings.reducedMotion;
-const ctx=$('world').getContext('2d');
+const ctx=$('world').getContext('2d',{alpha:false});
 function save(){try{localStorage.setItem(KEY,JSON.stringify(meta));}catch{saveBlocked=true;toast('瀏覽器限制儲存，這次進度只保留到關閉頁面');} $('scrap').textContent=`${meta.scrap} 零件`;}
 function beep(kind='deploy'){if(!sound)return;try{audio ||= new (window.AudioContext||window.webkitAudioContext)();audio.resume();const o=audio.createOscillator(),g=audio.createGain();o.type='triangle';o.frequency.setValueAtTime(kind==='deploy'?280:kind==='win'?520:170,audio.currentTime);o.frequency.exponentialRampToValueAtTime(kind==='deploy'?440:kind==='win'?780:100,audio.currentTime+.12);g.gain.setValueAtTime(.035,audio.currentTime);g.gain.exponentialRampToValueAtTime(.001,audio.currentTime+.2);o.connect(g);g.connect(audio.destination);o.start();o.stop(audio.currentTime+.21);}catch{sound=false;}}
 function toast(text){$('toast').textContent=text;$('toast').classList.add('visible');toastUntil=performance.now()+2300;}
@@ -27,6 +27,29 @@ $('help').onclick=()=>showModal(`<p class="eyebrow">FIELD MANUAL</p><h2>車長�
 $('garage').onclick=openGarage;$('closeModal').onclick=()=>$('modal').close();$('modal').addEventListener('close',()=>{if(modalPaused&&game?.state.status==='paused'){game.pause(false);}modalPaused=false;update();});
 $('pause').onclick=()=>{game?.pause();update();};$('sound').onclick=()=>{sound=!sound;$('sound').textContent=sound?'♪ 開':'♪ 關';$('sound').setAttribute('aria-label',sound?'關閉音效':'開啟音效');meta.settings.sound=sound;save();if(sound)beep();};
 document.addEventListener('keydown',e=>{if($('modal').open||e.repeat||['INPUT','TEXTAREA','SELECT'].includes(e.target.tagName))return;const u=Object.values(UNITS).find(u=>u.key===e.key);if(u){e.preventDefault();deploy(u.id);}if([' ','p','P','Escape'].includes(e.key)&&game&&!(e.key===' '&&['BUTTON','A'].includes(e.target.tagName))){e.preventDefault();game.pause();update();}});document.addEventListener('visibilitychange',()=>{if(document.hidden&&game?.state.status==='playing'){game.pause(true);update();}});
-function update(){const s=game?.state||preview.state,d=STAGES[s.stage];$('stageNum').textContent=String(s.stage+1).padStart(2,'0');$('stageName').textContent=d.name;$('wave').textContent=game?`第 ${s.wave+1} / 3 波 · ${d.waves[s.wave].name}`:'等待出發 · 3 站生存旅程';$('hpText').textContent=`${Math.ceil(s.bus.hp)} / ${s.bus.maxHp}`;$('hpBar').style.width=`${Math.max(0,s.bus.hp/s.bus.maxHp*100)}%`;$('hpBar').style.background=s.bus.hp/s.bus.maxHp<.3?'var(--red)':'var(--mint)';$('energy').textContent=Math.floor(s.resource);$('energy').nextElementSibling.textContent='/'+s.maxResource;$('pause').disabled=!game||!['playing','paused'].includes(s.status);$('pause').textContent=s.status==='paused'?'▶ 繼續':'Ⅱ 暫停';$('sector').textContent=`SECTOR 0${s.stage+1} / ${d.label}`;if(game){const ev=s.events.at(-1);if(ev&&ev.id!==lastEvent){$('signal').textContent=ev.text;lastEvent=ev.id;}}else $('signal').textContent='通訊正常 · 等待車長指令';$('synergy').textContent=s.upgrades.length?`本趟改裝 ${s.upgrades.length} 項 · 前線 ${s.allies.length} 人 · ${game?.mode==='daily'?'每日固定挑戰':'守住最後的回家路'}`:'小隊羈絆：盾兵保護前排，醫護維持戰線';for(const {b,u}of cards){b.disabled=!game||!game.canDeploy(u.id);const cd=s.cooldowns[u.id]||0;b.classList.toggle('cooling',cd>0);b.querySelector('.cost').textContent='⚡ '+(game?game.unitCost(u.id):u.cost);b.setAttribute('aria-label',`派遣${u.name}，${game?game.unitCost(u.id):u.cost}能量，快捷鍵${u.key}`);b.querySelector('.cooldown').style.width=`${cd/(game?game.unitCooldown(u.id):u.cooldown)*100}%`;b.querySelector('.cdtext').textContent=cd>0?cd.toFixed(1)+'s':'';}setOverlay();}
-function loop(now){const dt=Math.min((now-last)/1000,.25);last=now;game?.tick(dt);uiTime+=dt;const s=game?.state||preview.state;if(now-lastRender>=1000/30){lastRender=now;drawScene(ctx,{...s,time:game?s.time:uiTime,units:s.allies,busHp:s.bus.hp,busMaxHp:s.bus.maxHp,barricadeHp:s.barricade.hp,barricadeMaxHp:s.barricade.maxHp,reducedMotion:reduced});}if(now-lastPortrait>=250){lastPortrait=now;for(const {c,u}of cards)drawPortrait(c,u.id,reduced?0:uiTime,80);}if(now-lastUI>=125){lastUI=now;update();}if(now>toastUntil)$('toast').classList.remove('visible');requestAnimationFrame(loop);}
+function setText(el,value){value=String(value);if(el.textContent!==value)el.textContent=value;}
+function setStyle(el,key,value){if(el.style[key]!==value)el.style[key]=value;}
+function setDisabled(el,value){if(el.disabled!==value)el.disabled=value;}
+function update(){
+ const s=game?.state||preview.state,d=STAGES[s.stage];
+ setText($('stageNum'),String(s.stage+1).padStart(2,'0'));setText($('stageName'),d.name);
+ setText($('wave'),game?`第 ${s.wave+1} / 3 波 · ${d.waves[s.wave].name}`:'等待出發 · 3 站生存旅程');
+ setText($('hpText'),`${Math.ceil(s.bus.hp)} / ${s.bus.maxHp}`);setStyle($('hpBar'),'width',`${Math.max(0,Math.round(s.bus.hp/s.bus.maxHp*100))}%`);setStyle($('hpBar'),'background',s.bus.hp/s.bus.maxHp<.3?'var(--red)':'var(--mint)');
+ setText($('energy'),Math.floor(s.resource));setText($('energy').nextElementSibling,'/'+s.maxResource);
+ setDisabled($('pause'),!game||!['playing','paused'].includes(s.status));setText($('pause'),s.status==='paused'?'繼續':'暫停');
+ setText($('sector'),`SECTOR 0${s.stage+1} / ${d.label}`);
+ if(game){const ev=s.events.at(-1);if(ev&&ev.id!==lastEvent){setText($('signal'),ev.text);lastEvent=ev.id;}}else setText($('signal'),'通訊正常 · 等待車長指令');
+ setText($('synergy'),s.upgrades.length?`本趟改裝 ${s.upgrades.length} 項 · 前線 ${s.allies.length} 人 · ${game?.mode==='daily'?'每日固定挑戰':'守住最後的回家路'}`:'小隊羈絆：盾兵保護前排，醫護維持戰線');
+ for(const {b,u}of cards){
+ setDisabled(b,!game||!game.canDeploy(u.id));const cd=s.cooldowns[u.id]||0;
+ if(b.classList.contains('cooling')!==(cd>0))b.classList.toggle('cooling',cd>0);
+ const cost=game?game.unitCost(u.id):u.cost;setText(b.querySelector('.cost'),'⚡ '+cost);
+ const label=`派遣${u.name}，${cost}能量，快捷鍵${u.key}`;if(b.getAttribute('aria-label')!==label)b.setAttribute('aria-label',label);
+ setStyle(b.querySelector('.cooldown'),'width',`${Math.round(cd/(game?game.unitCooldown(u.id):u.cooldown)*100)}%`);
+ setText(b.querySelector('.cdtext'),cd>0?(Math.ceil(cd*2)/2).toFixed(1)+'s':'');
+ }
+ if(globalThis.location?.search.includes('debug=1')){let diag=$('diagnostics');if(!diag){diag=document.createElement('p');diag.id='diagnostics';diag.style.cssText='font:11px monospace;color:#a9cfc3;padding:10px';document.querySelector('footer').append(diag);}setText(diag,`t=${Math.floor(s.time)}s allies=${s.allies.length} enemies=${s.enemies.length} fx=${s.effects.length} events=${s.events.length} heap=${Math.round((performance.memory?.usedJSHeapSize||0)/1048576)}MB`);}
+ setOverlay();
+}
+function loop(now){const dt=Math.min((now-last)/1000,.25);last=now;game?.tick(dt);uiTime+=dt;const s=game?.state||preview.state;if(now-lastRender>=1000/30){lastRender=now;drawScene(ctx,{...s,time:game?s.time:uiTime,units:s.allies,busHp:s.bus.hp,busMaxHp:s.bus.maxHp,barricadeHp:s.barricade.hp,barricadeMaxHp:s.barricade.maxHp,reducedMotion:reduced});}if(now-lastPortrait>=250){lastPortrait=now;for(const {c,u}of cards)drawPortrait(c,u.id,reduced?0:uiTime,80);}if(now-lastUI>=125){lastUI=now;update();}if(now>toastUntil&&$('toast').classList.contains('visible'))$('toast').classList.remove('visible');requestAnimationFrame(loop);}
 save();update();requestAnimationFrame(loop);

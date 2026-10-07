@@ -7,3 +7,5 @@
 
 .panel>.secondary{margin-left:10px} .garage-row button:disabled{opacity:.4}
 @media(min-width:601px) and (max-width:850px){.field{min-height:315px}.intro h2{font-size:32px}.intro p{font-size:11px;margin-bottom:15px}.intro small{margin-top:10px}}
+
+@media(max-width:600px){.topbar>.icon{font-size:10px;min-width:42px}.topbar>.icon::first-letter{font-size:10px}}
