@@ -9,7 +9,7 @@ import { launch } from './ui-harness.mjs';
 
 const runCount = Math.max(1, Math.min(20, Number(process.argv[2]) || 5));
 const ui = launch({ realArt: true });
-const maxima = { allies: 0, enemies: 0, effects: 0, events: 0, nodes: 0, contexts: 0 };
+const maxima = { allies: 0, enemies: 0, effects: 0, events: 0, nodes: 0, contexts: 0, cachedBytes: 0 };
 const effectTypes = new Set(), runStats = [];
 let now = 1000, frames = 0;
 ui.get('introActions').querySelector('button').click();
@@ -41,10 +41,13 @@ for (let run = 0; run < runCount; run++) {
     assert.ok(state.events.length <= 24);
     { // Check live bounds on every animation frame, not only at checkpoints.
       const audit = ui.audit();
-      maxima.nodes = Math.max(maxima.nodes, audit.nodes); maxima.contexts = Math.max(maxima.contexts, audit.contexts);
+      maxima.nodes = Math.max(maxima.nodes, audit.nodes); maxima.contexts = Math.max(maxima.contexts, audit.contexts); maxima.cachedBytes = Math.max(maxima.cachedBytes, audit.cachedBytes);
       assert.ok(audit.nodes <= 220, `live DOM grew to ${audit.nodes}`);
       assert.equal(audit.listeners, 3, 'listener registration is stable');
-      assert.ok(audit.contexts <= 12, 'only six main/portrait contexts + six cached canvases');
+      assert.ok(audit.contexts <= 39, 'six visible contexts + at most 33 bounded cache canvases');
+      assert.ok(audit.glows <= 7); assert.ok(audit.sprites <= 10); assert.ok(audit.portraits <= 10);
+      assert.ok(audit.cachedBytes <= 24056152, 'cache backing dimensions remain within the 22.94 MiB architecture');
+      assert.equal(audit.contexts, 6 + audit.backgrounds + audit.buses + audit.glows + audit.sprites + audit.portraits, 'no extra untracked canvas contexts');
       assert.ok(audit.backgrounds <= 3); assert.ok(audit.buses <= 3); assert.equal(audit.entities, 0, 'renderer buffer emptied every frame');
     }
   }
@@ -55,6 +58,10 @@ for (let run = 0; run < runCount; run++) {
   global.gc?.();
   const memory = process.memoryUsage();
   const record = { run: run + 1, seconds: Math.round((now - began) / 1000), hp: Math.round(ui.app.game.state.bus.hp), healed: Math.round(ui.app.game.state.stats.healed), heapMiB: +(memory.heapUsed / 1048576).toFixed(2), rssMiB: +(memory.rss / 1048576).toFixed(2), audit: ui.audit() };
+  if (runStats.length) {
+    const warm = runStats[0].audit;
+    for (const key of ['contexts', 'backgrounds', 'buses', 'glows', 'sprites', 'portraits', 'cachedBytes']) assert.equal(record.audit[key], warm[key], `${key} must stabilize after the first full run`);
+  }
   runStats.push(record); console.log(JSON.stringify(record));
   if (run + 1 < runCount) ui.get('overlay').querySelector('button').click();
 }

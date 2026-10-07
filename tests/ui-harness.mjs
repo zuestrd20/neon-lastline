@@ -92,7 +92,7 @@ export function launch({ saved = {}, blockedStorage = false, realArt = false } =
   });
   if (realArt) {
     const artSource = readFileSync(new URL('../art.js', import.meta.url), 'utf8').replace(/^export /gm, '');
-    vm.runInContext(artSource + '\n globalThis.artAudit = () => ({ backgrounds: bgCache.size, buses: busCache.size, entities: entityBuffer.length });', context, { filename: 'art.js' });
+    vm.runInContext(artSource + '\n globalThis.artAudit = () => ({ backgrounds: bgCache.size, buses: busCache.size, glows: glowCache.size, sprites: spriteCache.size, portraits: portraitCache.size, cachedBytes: [...bgCache.values(), ...busCache.values(), ...glowCache.values(), ...spriteCache.values(), ...portraitCache.values()].reduce((bytes, canvas) => bytes + canvas.width * canvas.height * 4, 0), entities: entityBuffer.length });', context, { filename: 'art.js' });
     const scene = context.drawScene, portrait = context.drawPortrait;
     context.drawScene = (...args) => { metrics.sceneDraws++; scene(...args); for (const surface of surfaces) assert.equal(surface.depth, 0, 'canvas context state leak'); };
     context.drawPortrait = (...args) => { metrics.portraitDraws++; portrait(...args); for (const surface of surfaces) assert.equal(surface.depth, 0, 'canvas context state leak'); };
