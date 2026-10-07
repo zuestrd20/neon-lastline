@@ -212,3 +212,14 @@ test('render and DOM budgets are throttled while simulation receives every anima
   assert.ok(ui.metrics.uiUpdates >= 7 && ui.metrics.uiUpdates <= 9, `DOM refreshes: ${ui.metrics.uiUpdates}`);
   assert.ok(ui.metrics.portraitDraws >= 15 && ui.metrics.portraitDraws <= 25, `five-portrait paints: ${ui.metrics.portraitDraws}`);
 });
+
+test('paused rendering leaves DOM text, simulation, nodes and listeners unchanged', () => {
+  const ui = launch(); ui.app.start(); ui.get('pause').click();
+  const before = JSON.stringify(ui.app.game.snapshot()), audit = ui.audit();
+  ui.metrics.textWrites = 0;
+  for (let frame = 1; frame <= 600; frame++) ui.frame(1000 + frame * 1000 / 60);
+  assert.equal(JSON.stringify(ui.app.game.snapshot()), before);
+  assert.equal(ui.metrics.textWrites, 0, 'idle UI must avoid redundant text-node replacement');
+  assert.equal(ui.audit().nodes, audit.nodes);
+  assert.equal(ui.audit().listeners, audit.listeners);
+});

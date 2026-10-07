@@ -1,5 +1,5 @@
-import {Game,UNITS,STAGES,GARAGE_UPGRADES,ACHIEVEMENTS,sanitizeSave,purchaseGarage,garageCost,dailySeed} from './engine.js';
-import {drawScene,drawPortrait} from './art.js';
+import {Game,UNITS,STAGES,GARAGE_UPGRADES,ACHIEVEMENTS,sanitizeSave,purchaseGarage,garageCost,dailySeed} from './engine.js?v=1.0.3';
+import {drawScene,drawPortrait} from './art.js?v=1.0.3';
 const $=id=>document.getElementById(id), KEY='neon-lastline-v1';
 let meta,saveBlocked=false;try{meta=sanitizeSave(localStorage.getItem(KEY));}catch{meta=sanitizeSave({});saveBlocked=true;}
 let game=null,preview=new Game({seed:7}),last=performance.now(),uiTime=0,shown='',sound=false,audio=null,modalPaused=false,lastEvent=0,toastUntil=0,lastRender=0,lastUI=0,lastPortrait=0;
